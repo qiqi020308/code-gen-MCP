@@ -308,10 +308,11 @@ curl -X POST http://localhost:6968/mcp -H "Content-Type: application/json" \
 ```
 code_gen.py        # MCP 服务器主程序（支持标准输入输出与 HTTP 两种模式），唯一运行入口
 requirements.txt   # 依赖清单（仅需 requests 一个库）
+skill.md           # 给 AI 的"使用说明书"：角色定义、25 工具分类、典型工作流与踩坑提醒
 README.md          # 本文档
 ```
 
-整个服务就是单个 Python 文件，无状态，可任意多实例部署。
+服务运行时就是单个 Python 文件，无状态，可任意多实例部署；`skill.md` 是配套给 AI 读取的指令文件，不属于运行时依赖。
 
 ---
 
