@@ -1,7 +1,7 @@
-# code-gen-mcp
+# code-gen-mcp（代码生成器 MCP 服务器）
 
 > 把代码生成器 [code-gen](https://gitee.com/durcframework/code-gen) 包装成 **MCP 服务器**，
-> 让 AI（Claude Code / Cursor / Cline …）按**团队统一模板**生成代码，从源头保证风格一致。
+> 让 AI（Claude Code / Cursor / Cline 等）按**团队统一模板**生成代码，从源头保证风格一致。
 
 ---
 
@@ -25,9 +25,9 @@ AI 只能走 MCP 这一条路，MCP 的出口是 Velocity 模板，而模板就�
 ## 架构
 
 ```
-AI 客户端（Claude Code / Cursor / Cline …）
+AI 客户端（Claude Code / Cursor / Cline 等）
         │
-        │  MCP 协议（stdio 或 HTTP）
+        │  MCP 协议（标准输入输出 或 HTTP）
         ▼
 ┌─────────────────────────────┐
 │  code_gen.py   ← 本项目      │
@@ -47,9 +47,9 @@ AI 客户端（Claude Code / Cursor / Cline …）
 
 本项目**不重复实现**代码生成能力，只做三件事：
 
-1. 把后端 25 个 HTTP 接口 1:1 暴露为 MCP 工具
-2. 为每个工具提供**语义化 description**（决定 AI 能否正确选工具）
-3. 提供 stdio（本机）与 HTTP（团队共享）两种接入方式
+1. 把后端 25 个 HTTP 接口一一对应地暴露为 MCP 工具
+2. 为每个工具提供**语义化描述（description）**——这直接决定 AI 能否正确选用工具
+3. 提供标准输入输出（本机）与 HTTP（团队共享）两种接入方式
 
 ---
 
@@ -76,7 +76,9 @@ docker run --name gen --restart=always -p 6969:6969 \
 
 ### 2. 部署 MCP 服务器
 
-#### 方式 A：本机 stdio（推荐个人使用）
+#### 方式 A：本机直连（推荐个人使用）
+
+MCP 服务器通过标准输入输出与客户端通信，进程由客户端拉起，无需常驻：
 
 ```bash
 pip install -r requirements.txt
@@ -90,7 +92,9 @@ python code_gen.py
 claude mcp add code-gen --transport stdio -- python /绝对路径/code_gen.py
 ```
 
-#### 方式 B：服务器 HTTP（推荐团队共享）
+#### 方式 B：服务器常驻 HTTP（推荐团队共享）
+
+MCP 服务器以 HTTP 服务常驻，团队共用一套模板与数据源：
 
 直接跑 Python（无需构建镜像）：
 
@@ -150,7 +154,7 @@ curl -X POST http://localhost:6968/mcp -H "Content-Type: application/json" \
 
 ## MCP 工具一览
 
-共 **25 个**工具，与后端接口 1:1 对应。
+共 **25 个**工具，与后端接口一一对应。
 
 ### 数据源（7）
 
@@ -171,7 +175,7 @@ curl -X POST http://localhost:6968/mcp -H "Content-Type: application/json" \
 | `template_list` | 查询模板列表（可按 groupId 过滤） |
 | `template_get` | 查询模板详情 |
 | `template_add` | 新增模板 |
-| `template_save` | 按 (name, groupId) 新增或更新（upsert） |
+| `template_save` | 按「名称 + 分组」新增或更新（已存在则覆盖，适合批量导入） |
 | `template_update` | 修改模板 |
 | `template_copy` | 复制模板 |
 | `template_delete` | 删除模板（软删除） |
@@ -267,7 +271,8 @@ public class ${context.classNamePascal} implements Serializable {
 常用变量：`${context.classNamePascal}`、`${context.packageName}`、`${context.author}`、
 `${context.date}`、`${table.comment}`、`${columns}`、`${column.boxType}`、`${column.columnNameLF}`。
 
-> 仓库 `templates/` 目录提供了 mybatis-plus、fastmybatis 等现成模板可直接导入。
+> 需要现成模板可直接取用：上游仓库的 `templates/` 目录提供了 mybatis-plus、fastmybatis 等模板，
+> 可从 <https://gitee.com/durcframework/code-gen> 下载后，通过 `template_save` 导入本服务的模板分组。
 
 ---
 
@@ -293,16 +298,16 @@ curl -X POST http://localhost:6968/mcp -H "Content-Type: application/json" \
 
 应返回 25 个工具的名称与描述。
 
-stdio 模式下，在 Claude Code 中执行 `/mcp`，确认 `code-gen` 为 **Connected**，
-然后直接对 AI 说「列出所有数据源」即可验证链路通畅。
+本机直连模式下，在 Claude Code 中执行 `/mcp` 命令，确认 `code-gen` 显示为 **Connected**（已连接），
+然后直接对 AI 说「列出所有数据源」即可验证链路是否通畅。
 
 ---
 
 ## 文件说明
 
 ```
-code_gen.py        # MCP 服务器主程序（stdio + HTTP 双模式），唯一运行入口
-requirements.txt   # 依赖清单（仅 requests）
+code_gen.py        # MCP 服务器主程序（支持标准输入输出与 HTTP 两种模式），唯一运行入口
+requirements.txt   # 依赖清单（仅需 requests 一个库）
 README.md          # 本文档
 ```
 
@@ -312,7 +317,7 @@ README.md          # 本文档
 
 ## 已知问题与限制
 
-- HTTP 模式实现为纯 POST + JSON 响应，**不支持 SSE 流式响应**（GET 返回 405）。
+- HTTP 模式实现为纯 POST 请求 + JSON 响应，**不支持 SSE（服务端推送）流式响应**，GET 请求返回 405。
   兼容 Claude Code 等主流客户端，但不是完整的 Streamable HTTP 规范实现。
 - 后端 `datasource/update` 是**全字段覆盖**，调用前必须先 `datasource_list` 取完整对象。
 - 后端业务错误通常仍返回 HTTP 200，错误信息在 JSON 的 `code`/`msg` 中（本 MCP 已转换）。
@@ -323,8 +328,10 @@ README.md          # 本文档
 
 ## 许可证
 
-[MIT](./LICENSE) — 版权归上游 [code-gen](https://gitee.com/durcframework/code-gen) 作者 tanghc。
-本项目为在其之上的 MCP 协议封装。
+本项目代码（`code_gen.py`）为独立开发作品，采用 **MIT** 许可证，可自由使用、修改与分发。
+
+本服务仅通过 HTTP 调用上游 [code-gen](https://gitee.com/durcframework/code-gen) 的 REST 接口，
+**不包含其任何源代码**。上游同为 MIT 许可证（Copyright 2020 tanghc），在此致谢。
 
 ## 相关链接
 
